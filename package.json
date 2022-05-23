@@ -1,0 +1,22 @@
+{
+  "name": "js-markdown-docs",
+  "version": "1.0.0",
+  "description": "a tool helps you use javascript to create markdown docs",
+  "main": "bin/index.ts",
+  "scripts": {
+    "dev": "nodemon bin/index.ts"
+  },
+  "keywords": [
+    "typescript",
+    "javascript",
+    "markdown"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/js-beautify": "^1.13.3",
+    "js-beautify": "^1.14.3",
+    "node-ts": "^5.1.2",
+    "nodemon": "^2.0.16"
+  }
+}
