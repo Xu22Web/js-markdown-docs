@@ -33,51 +33,16 @@ const span = (id: string, target: string) => {
   return `<span id="${id}">${target}</span>`;
 };
 /**
- * @description 转义'<>'
+ * @description 转义'<'、'>'、'|'
  * @param key
  */
 const escape = (key: string) => {
-  return key.replace(/\</g, '&lt;').replace(/\</g, '&gt;');
+  return key
+    .replace(/\</g, '&lt;')
+    .replace(/\>/g, '&gt;')
+    .replace(/\|/, '&#124;');
 };
-/**
- * @description 查找链接属性
- * @param type
- * @returns
- */
-const findTypeLink = (type: string) => {
-  // 遍历获取匹配
-  for (const key in reNewData) {
-    const typeKey = key.replace('<T>', '');
-    const keyRegExp = new RegExp(typeKey);
-    // 匹配键
-    if (TypeOf.strMatch(type, keyRegExp)) {
-      const newType = escape(
-        type.replace(
-          reNewData[key].id,
-          link(reNewData[key].id, reNewData[key].id, reNewData[key].description)
-        )
-      );
-      return newType;
-    }
-    // 类型匹配
-    const { mode, types } = <MarkdownClassValue>reNewData[key];
-    if (mode === 'class' && TypeOf.isNotEmptyObj(types)) {
-      let newType = type;
-      for (const t in types) {
-        const typeKey = t.replace('<T>', '');
-        const typeRegExp = new RegExp(typeKey);
-        if (TypeOf.strMatch(type, typeRegExp)) {
-          newType = newType.replace(
-            typeRegExp,
-            link(t, typeKey, types[t].description)
-          );
-        }
-      }
-      return escape(newType);
-    }
-  }
-  return escape(type);
-};
+// 处理后的数据
 const reNewData: Markdown = {};
 for (const key in markdownData) {
   reNewData[key] = <MarkdownClassValue>markdownData[key];
@@ -100,6 +65,65 @@ for (const key in markdownData) {
     reNewData[`${key}.${methodName}`].id = `${key}_${methodName}`;
   }
 }
+// console.log(reNewData);
+
+/**
+ * @description 查找链接属性
+ * @param type
+ * @returns
+ */
+const findTypeLink = (type: string) => {
+  let newType = ' ';
+  // 遍历获取匹配
+  for (const key in reNewData) {
+    if (type === key) {
+      newType = link(type, type, reNewData[key].description);
+      return escape(newType);
+    }
+    const typeKey = key.replace(/\<T\>/, '');
+    const keyRegExp = new RegExp(`[^A-z]${typeKey}[^A-z]`);
+    // key 匹配键
+    if (TypeOf.strMatch(type, keyRegExp)) {
+      const newType = escape(
+        type.replace(
+          reNewData[key].id,
+          link(reNewData[key].id, reNewData[key].id, reNewData[key].description)
+        )
+      );
+      return newType;
+    }
+    // types 类型匹配
+    const { mode, types } = <MarkdownClassValue>reNewData[key];
+    if (mode === 'class' && TypeOf.isNotEmptyObj(types)) {
+      newType = type;
+      // 标志
+      let flag = false;
+      for (const t in types) {
+        if (type === types[t].value) {
+          const typeRegExp = new RegExp(type, 'g');
+          newType = newType.replace(
+            typeRegExp,
+            link(type, type, types[t].description)
+          );
+        }
+        const typeKey = t.replace(/\<T\>/, '');
+        const typeRegExp = new RegExp(typeKey, 'g');
+        if (TypeOf.strMatch(type, typeRegExp)) {
+          flag = true;
+          newType = newType.replace(
+            typeRegExp,
+            link(t, typeKey, types[t].description)
+          );
+        }
+      }
+      if (flag) {
+        return escape(newType);
+      }
+    }
+  }
+  return escape(type);
+};
+
 /**
  * @description 处理 props 类型
  * @param markdownProp
@@ -140,21 +164,21 @@ const handleMethods = (markdownMethod: MarkdownMethodValue) => {
   // 参数说明
   if (TypeOf.isNotEmptyObj(params)) {
     clip.push(`#### 参数`);
+    // 生成表格
+    const blank = [];
+    blank.push(`| 属性	| 类型	| 默认值	| 必填	| 说明 |`);
+    blank.push(`| :---:	| :---:	| :---:	| :---:	| :---: |`);
     for (const paramName in params) {
       const { description, type, required, defaultValue } = params[paramName];
       // 链接类型
       const linkedType = findTypeLink(type);
-      // 生成表格
-      const blank = [];
-      blank.push(`| 属性	| 类型	| 默认值	| 必填	| 说明 |`);
-      blank.push(`| :---:	| :---:	| :---:	| :---:	| :---: |`);
       blank.push(
-        `| ${paramName}	| ${linkedType}	| ${defaultValue}	| ${
+        `| ${paramName}	| ${escape(linkedType)}	| ${defaultValue}	| ${
           required ? '是' : '否'
         }	| ${description} |`
       );
-      clip.push(blank.join('\n'));
     }
+    clip.push(blank.join('\n'));
   }
   // 返回值
   if (TypeOf.objStructTypeMatch(returntype, { type: 'isNotBlankStr' })) {
@@ -294,7 +318,7 @@ const createMD = () => {
     if (mode === 'class') {
       clip.push(`### ${span(id, escape(key))}`);
       clip.push(`${description}`);
-      clip.push(...handleClass(<MarkdownClassValue>reNewData[key]));
+      // clip.push(...handleClass(<MarkdownClassValue>reNewData[key]));
     }
     // props
     if (mode === 'props') {
@@ -323,6 +347,7 @@ const createMD = () => {
       const classNameLinkedType = findTypeLink(className);
       // 返回值链接
       const returnLinkedType = findTypeLink(returntype.type);
+
       // 参数链接
       const paramsLinkedType = [];
 
@@ -331,19 +356,18 @@ const createMD = () => {
         paramsLinkedType.push(`${param}: ${findTypeLink(type)}`);
       }
       // 方法名
-      const methodName = `${classNameLinkedType}.${method}(${paramsLinkedType.join(
-        ', '
-      )})`;
+      const methodName = `${classNameLinkedType}.${escape(
+        method
+      )}(${paramsLinkedType.join(', ')})`;
       // 标题
       clip.push(`### ${span(id, methodName)}: ${returnLinkedType}`);
       // 描述
       clip.push(`${description}`);
       clip.push(...handleMethods(<MarkdownMethodValue>reNewData[key]));
     }
-    const text = clip.join('\n\n');
-    // console.log(text);
-
-    fs.writeFileSync(destFile, text);
   }
+  const text = clip.join('\n\n');
+  // console.log(text);
+  fs.writeFileSync(destFile, text);
 };
 createMD();
